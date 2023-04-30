@@ -1,464 +1,188 @@
 #include <SDL.h>
-#include <SDL_image.h>
-#include <stdio.h>
-#include <string>
+#include <iostream>
+#include <memory>
 
+// Constants for screen dimensions and paddle/ball properties
 const int SCREEN_WIDTH = 640;
 const int SCREEN_HEIGHT = 480;
+const int PADDLE_WIDTH = 10;
+const int PADDLE_HEIGHT = 80;
+const int BALL_WIDTH = 10;
+const int BALL_HEIGHT = 10;
+const int BALL_SPEED = 1;
 
-
-class LTexture													//encapsulates an SDL texture object, and provides a number of methods for loading, rendering, and managing textures.
-{
+// Base class for game objects (paddles and ball)
+class GameObject {
 public:
-	
-	LTexture();													//Constructor
+    GameObject(int xPos, int yPos, int width, int height, int velocity) :
+        x(xPos), y(yPos), width(width), height(height), velocity(velocity) {}
+    virtual ~GameObject() {}
 
-	~LTexture();												//Destructor
+    int getX() const { return x; }
+    int getY() const { return y; }
+    int getWidth() const { return width; }
+    int getHeight() const { return height; }
+    void incY() { y = y + 5; }
+    void decY() { y = y - 5; }
+    
 
-	bool loadFromFile(std::string path);						//Loads image at specified path
+    virtual void update() = 0;
+    virtual void draw(SDL_Renderer* renderer) const = 0;
 
-	void free();												//Deallocates texture
-
-	void setColor(Uint8 red, Uint8 green, Uint8 blue);			//Sets color modulation
-
-	void setBlendMode(SDL_BlendMode blending);					//Sets blending ??
-
-	void setAlpha(Uint8 alpha);									//Sets alpha modulation
-
-	void render(int x, int y, SDL_Rect* clip = NULL, double angle = 0.0, SDL_Point* center = NULL, SDL_RendererFlip flip = SDL_FLIP_NONE);						//Renders texture at given point
-
-	//Gets image dimensions
-	int getWidth();
-	int getHeight();
-
-private:
-	
-	SDL_Texture* mTexture;
-
-	//Image dimensions
-	int mWidth;
-	int mHeight;
+protected:
+    int x, y;
+    int width, height;
+    int velocity;
 };
 
-
-class Dot														//The dot that will move around on the screen
-{
+// Class for player paddles
+class Paddle : public GameObject {
 public:
-	
-	static const int DOT_WIDTH = 20;							//Dimensions
-	static const int DOT_HEIGHT = 20;
+    Paddle(int xPos, int yPos) :
+        GameObject(xPos, yPos, PADDLE_WIDTH, PADDLE_HEIGHT, 0) {}
 
-	static const int DOT_VEL = 10;								//Maximum axis velocity
+    void update() override {
+        
+    }
 
-	
-	Dot();														//Constructor
+    void draw(SDL_Renderer* renderer) const override {
+        SDL_Rect rect = { x, y, width, height };
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        SDL_RenderFillRect(renderer, &rect);
+    }
 
-	
-	void handleEvent(SDL_Event& e);								//Takes key presses and adjusts the dot's velocity
-
-	void move(SDL_Rect& wall);									//Moves the dot and checks collision
-
-	void render();												//Shows the dot on the screen
-
-private:
-	
-	int mPosX, mPosY;											//The X and Y offsets of the dot
-	
-	int mVelX, mVelY;											//The velocity of the dot
-
-	SDL_Rect mCollider;											//Collision
+    void stop() { y = 0; }
+    void replace() { y = SCREEN_HEIGHT - height; }
 };
 
-
-bool checkCollision(SDL_Rect a, SDL_Rect b);					//Box collision detector
-
-SDL_Renderer* gRenderer = NULL;									//The window renderer
-
-
-LTexture gDotTexture;											//Scene textures
-
-LTexture::LTexture()
-{
-	//Initialize
-	mTexture = NULL;
-	mWidth = 0;
-	mHeight = 0;
-}
-
-LTexture::~LTexture()
-{
-	//Deallocate
-	free();
-}
-
-bool LTexture::loadFromFile(std::string path)
-{
-	free();														//Get rid of preexisting texture
-
-	SDL_Texture* newTexture = NULL;								//The final texture
-
-	SDL_Surface* loadedSurface = IMG_Load(path.c_str());			//Load image at specified path
-	if (loadedSurface == NULL)
-	{
-		printf("Unable to load image %s! SDL_image Error: %s\n", path.c_str(), IMG_GetError());
-	}
-	else
-	{
-		SDL_SetColorKey(loadedSurface, SDL_TRUE, SDL_MapRGB(loadedSurface->format, 0, 0xFF, 0xFF));						//Color key image
-
-		newTexture = SDL_CreateTextureFromSurface(gRenderer, loadedSurface);					//Create texture from surface pixels
-		if (newTexture == NULL)
-		{
-			printf("Unable to create texture from %s! SDL Error: %s\n", path.c_str(), SDL_GetError());
-		}
-		else
-		{
-			//Get image dimensions
-			mWidth = loadedSurface->w;
-			mHeight = loadedSurface->h;
-		}
-
-		
-		SDL_FreeSurface(loadedSurface);									//Get rid of old loaded surface
-	}
-
-	//Return success ??
-	mTexture = newTexture;
-	return mTexture != NULL;
-}
-
-void LTexture::free()													//Free texture if it exists
-{
-	if (mTexture != NULL)
-	{
-		SDL_DestroyTexture(mTexture);
-		mTexture = NULL;
-		mWidth = 0;
-		mHeight = 0;
-	}
-}
-
-void LTexture::setColor(Uint8 red, Uint8 green, Uint8 blue)
-{
-	SDL_SetTextureColorMod(mTexture, red, green, blue);						//Modulate texture rgb
-}
-
-void LTexture::setBlendMode(SDL_BlendMode blending)
-{
-	SDL_SetTextureBlendMode(mTexture, blending);							//Set blending function ??
-}
-
-void LTexture::setAlpha(Uint8 alpha)
-{
-	SDL_SetTextureAlphaMod(mTexture, alpha);								//Modulate texture alpha
-}
-
-void LTexture::render(int x, int y, SDL_Rect* clip, double angle, SDL_Point* center, SDL_RendererFlip flip)
-{
-	SDL_Rect renderQuad = { x, y, mWidth, mHeight };						//Set rendering space and render to screen
-
-	if (clip != NULL)														//Set clip rendering dimensions ??
-	{
-		renderQuad.w = clip->w;
-		renderQuad.h = clip->h;
-	}
-
-	SDL_RenderCopyEx(gRenderer, mTexture, clip, &renderQuad, angle, center, flip);								//Render to screen
-}
-
-int LTexture::getWidth()											//Getter
-{
-	return mWidth;
-}
-
-int LTexture::getHeight()											//Getter
-{
-	return mHeight;
-}
-
-Dot::Dot()
-{
-	//Initialize the offsets
-	mPosX = 0;
-	mPosY = 0;
-
-	//Set collision box dimension
-	mCollider.w = DOT_WIDTH;
-	mCollider.h = DOT_HEIGHT;
-
-	//Initialize the velocity
-	mVelX = 0;
-	mVelY = 0;
-}
-
-void Dot::handleEvent(SDL_Event& e)
-{
-	if (e.type == SDL_KEYDOWN && e.key.repeat == 0)						//If a key was pressed
-	{
-		//Adjust the velocity
-		switch (e.key.keysym.sym)
-		{
-		case SDLK_UP: mVelY -= DOT_VEL; break;
-		case SDLK_DOWN: mVelY += DOT_VEL; break;
-		case SDLK_LEFT: mVelX -= DOT_VEL; break;
-		case SDLK_RIGHT: mVelX += DOT_VEL; break;
-		}
-	}
-	
-	else if (e.type == SDL_KEYUP && e.key.repeat == 0)					//If a key was released
-	{
-		//Adjust the velocity
-		switch (e.key.keysym.sym)
-		{
-		case SDLK_UP: mVelY += DOT_VEL; break;
-		case SDLK_DOWN: mVelY -= DOT_VEL; break;
-		case SDLK_LEFT: mVelX += DOT_VEL; break;
-		case SDLK_RIGHT: mVelX -= DOT_VEL; break;
-		}
-	}
-}
-
-void Dot::move(SDL_Rect& wall)
-{
-	//Move the dot left or right
-	mPosX += mVelX;
-	mCollider.x = mPosX;
-
-	if ((mPosX < 0) || (mPosX + DOT_WIDTH > SCREEN_WIDTH) || checkCollision(mCollider, wall))								//If the dot collided or went too far to the left or right
-	{
-		//Move back
-		mPosX -= mVelX;
-		mCollider.x = mPosX;
-	}
-
-	//Move the dot up or down
-	mPosY += mVelY;
-	mCollider.y = mPosY;
-
-	if ((mPosY < 0) || (mPosY + DOT_HEIGHT > SCREEN_HEIGHT) || checkCollision(mCollider, wall))								//If the dot collided or went too far up or down
-	{
-		//Move back
-		mPosY -= mVelY;
-		mCollider.y = mPosY;
-	}
-}
-void Dot::render()
-{
-	gDotTexture.render(mPosX, mPosY);							//Show the dot
-}
-
-
-class alphabeta {
+// Class for ball
+class Ball : public GameObject {
 public:
+    Ball(int xPos, int yPos) :
+        GameObject(xPos, yPos, BALL_WIDTH, BALL_HEIGHT, BALL_SPEED) {}
 
-	alphabeta()						//Constructor
-	{
-		success = true;				//Initialization flag
+    void update() override {
+        x += velocity;
 
-		if (SDL_Init(SDL_INIT_VIDEO) < 0)						//Initialize SDL
-		{
-			printf("SDL could not initialize! SDL Error: %s\n", SDL_GetError());
-			success = false;
-		}
-		else
-		{
-			if (!SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1"))						//Set texture filtering to linear
-			{
-				printf("Warning: Linear texture filtering not enabled!");
-			}
+        if (direction == 1) {
+            y += velocity;
+        }
+        else {
+            y -= velocity;
+        }
 
-			gWindow = SDL_CreateWindow("Game", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);							//Create window
-			if (gWindow == NULL)
-			{
-				printf("Window could not be created! SDL Error: %s\n", SDL_GetError());
-				success = false;
-			}
-			else
-			{
-				gRenderer = SDL_CreateRenderer(gWindow, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);												//Create vsynced renderer for window
-				if (gRenderer == NULL)
-				{
-					printf("Renderer could not be created! SDL Error: %s\n", SDL_GetError());
-					success = false;
-				}
-				else
-				{
-					SDL_SetRenderDrawColor(gRenderer, 0xFF, 0xFF, 0xFF, 0xFF);												//Initialize renderer color
+        if (y < 0 || y + height > SCREEN_HEIGHT) {
+            direction = direction * -1;
+        }
+    }
 
-					//Initialize PNG loading
-					int imgFlags = IMG_INIT_PNG;
-					if (!(IMG_Init(imgFlags) & imgFlags))
-					{
-						printf("SDL_image could not initialize! SDL_image Error: %s\n", IMG_GetError());
-						success = false;
-					}
-				}
-			}
-		}
+    void draw(SDL_Renderer* renderer) const override {
+        SDL_Rect rect = { x, y, width, height };
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        SDL_RenderFillRect(renderer, &rect);
+    }
 
-	}
+    void reset() {
+        x = SCREEN_WIDTH / 2 - BALL_WIDTH / 2;
+        y = SCREEN_HEIGHT / 2 - BALL_HEIGHT / 2;
+        velocity = BALL_SPEED;
+        direction = rand() % 2 == 0 ? -1 : 1;
+    }
 
-	~alphabeta()					//Destructor
-	{
-		gDotTexture.free();							//Free loaded images
-
-		//Destroy window	
-		SDL_DestroyRenderer(gRenderer);
-		SDL_DestroyWindow(gWindow);
-		gWindow = NULL;
-		gRenderer = NULL;
-
-		//Quit SDL subsystems
-		IMG_Quit();
-		SDL_Quit();
-	}
-
-	bool getsuccess() {
-		return success;
-	}
+    void reverseVelocity() {
+        velocity = -velocity;
+        velocity += rand() % 5 - 1; // Add -1, 0, or 3 to the ball's velocity
+        direction = rand() % 2 == 0 ? -1 : 1;
+    }
 
 private:
-	SDL_Window* gWindow = NULL;										//The window we'll be rendering to
-	bool success;
-
+    int direction = rand() % 2 == 0 ? -1 : 1;
 };
 
-
-
-class Media_loader {
-public:
-	Media_loader() {
-		success = true;
-
-		if (!gDotTexture.loadFromFile("Project files/dot.bmp"))
-		{
-			printf("Failed to load dot texture!\n");
-			success = false;
-		}
-	}
-
-	bool getsuccess() {
-		return success;
-	}
-
-private:
-	bool success;
-};
-
-
-
-
-bool checkCollision(SDL_Rect a, SDL_Rect b)
-{
-	//The sides of the rectangles
-	int leftA, leftB;
-	int rightA, rightB;
-	int topA, topB;
-	int bottomA, bottomB;
-
-	//Calculate the sides of rect A
-	leftA = a.x;
-	rightA = a.x + a.w;
-	topA = a.y;
-	bottomA = a.y + a.h;
-
-	//Calculate the sides of rect B
-	leftB = b.x;
-	rightB = b.x + b.w;
-	topB = b.y;
-	bottomB = b.y + b.h;
-
-	//If any of the sides from A are outside of B
-	if (bottomA <= topB)
-	{
-		return false;
-	}
-
-	if (topA >= bottomB)
-	{
-		return false;
-	}
-
-	if (rightA <= leftB)
-	{
-		return false;
-	}
-
-	if (leftA >= rightB)
-	{
-		return false;
-	}
-
-	return true;					//If none of the sides from A are outside B
+// Function to check for collision between two objects
+bool checkCollision(const GameObject& obj1, const GameObject& obj2) {
+    return (obj1.getX() < obj2.getX() + obj2.getWidth() && obj1.getX() + obj1.getWidth() > obj2.getX() && obj1.getY() < obj2.getY() + obj2.getHeight() && obj1.getY() + obj1.getHeight() > obj2.getY());
 }
 
-int main(int argc, char* args[])
-{
-	alphabeta game;
-	Media_loader media;
-	//Start up SDL and create window
-	if (!game.getsuccess())
-	{
-		printf("Failed to initialize!\n");
-	}
-	else
-	{
-		//Load media
-		if (!media.getsuccess())
-		{
-			printf("Failed to load media!\n");
-		}
-		else
-		{
-			bool quit = false;							//Main loop flag
-			
-			SDL_Event e;								//Event handler
 
-			Dot dot;									//The dot that will be moving around on the screen
+int main(int argc, char* argv[]) {
+    SDL_Init(SDL_INIT_VIDEO);
 
-			//Set the wall
-			SDL_Rect wall;
-			wall.x = 300;
-			wall.y = 40;
-			wall.w = 40;
-			wall.h = 400;
+    SDL_Window* window = SDL_CreateWindow("Pong", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
 
-			//While application is running
-			while (!quit)
-			{
-				//Handle events on queue
-				while (SDL_PollEvent(&e) != 0)
-				{
-					//User requests quit
-					if (e.type == SDL_QUIT)
-					{
-						quit = true;
-					}
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, 0);
 
-					//Handle input for the dot
-					dot.handleEvent(e);
-				}
+    std::unique_ptr<Paddle> leftPaddle = std::make_unique<Paddle>(0, SCREEN_HEIGHT / 2 - PADDLE_HEIGHT / 2);
+    std::unique_ptr<Paddle> rightPaddle = std::make_unique<Paddle>(SCREEN_WIDTH - PADDLE_WIDTH, SCREEN_HEIGHT / 2 - PADDLE_HEIGHT / 2);
+    std::unique_ptr<Ball> ball = std::make_unique<Ball>(SCREEN_WIDTH / 2 - BALL_WIDTH / 2, SCREEN_HEIGHT / 2 - BALL_HEIGHT / 2);
 
-				//Move the dot and check collision
-				dot.move(wall);
+    bool running = true;
+    while (running) {
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT) {
+                running = false;
+            }
+        }
 
-				//Clear screen
-				SDL_SetRenderDrawColor(gRenderer, 0xFF, 0xFF, 0xFF, 0xFF);
-				SDL_RenderClear(gRenderer);
+        const Uint8* keystates = SDL_GetKeyboardState(NULL);
+        if (keystates[SDL_SCANCODE_W]) {
+            leftPaddle->decY();
+        }
+        if (keystates[SDL_SCANCODE_S]) {
+            leftPaddle->incY();
+        }
+        if (keystates[SDL_SCANCODE_UP]) {
+            rightPaddle->decY();
+        }
+        if (keystates[SDL_SCANCODE_DOWN]) {
+            rightPaddle->incY();
+        }
 
-				//Render wall
-				SDL_SetRenderDrawColor(gRenderer, 0x00, 0x00, 0x00, 0xFF);
-				SDL_RenderDrawRect(gRenderer, &wall);
+        ball->update();
 
-				dot.render();				//Render dot
+        // Check for collision between ball and paddles
+        if (checkCollision(*ball, *leftPaddle) || checkCollision(*ball, *rightPaddle)) {
+            ball->reverseVelocity();
+        }
 
-				SDL_RenderPresent(gRenderer);						//Update screen
+        // Check for scoring
+        if (ball->getX() < 0) {
+            ball->reset();
+        }
+        if (ball->getX() > SCREEN_WIDTH) {
+            ball->reset();
+        }
 
-				SDL_Delay(16);
-			}
-		}
-	}
-	
+        if (leftPaddle->getY() < 0) {
+            leftPaddle -> stop();
+        }
+        else if (leftPaddle->getY() > SCREEN_HEIGHT - leftPaddle->getHeight()) {
+            leftPaddle->replace();
+        }
 
-	return 0;
+        if (rightPaddle->getY() < 0) {
+            rightPaddle->stop();
+        }
+        else if (rightPaddle->getY() > SCREEN_HEIGHT - rightPaddle->getHeight()) {
+            rightPaddle->replace();
+        }
+
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderClear(renderer);
+
+        leftPaddle->draw(renderer);
+        rightPaddle->draw(renderer);
+        ball->draw(renderer);
+
+        SDL_RenderPresent(renderer);
+
+        SDL_Delay(10);
+    }
+
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+
+    return 0;
 }
