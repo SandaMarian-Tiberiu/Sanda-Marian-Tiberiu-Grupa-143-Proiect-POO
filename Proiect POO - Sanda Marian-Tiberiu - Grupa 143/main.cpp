@@ -1,120 +1,110 @@
 #include <SDL.h>
+#include <SDL_image.h>
 #include <iostream>
 #include <memory>
-
-// Constants for screen dimensions and paddle/ball properties
-const int SCREEN_WIDTH = 640;
-const int SCREEN_HEIGHT = 480;
-const int PADDLE_WIDTH = 10;
-const int PADDLE_HEIGHT = 80;
-const int BALL_WIDTH = 10;
-const int BALL_HEIGHT = 10;
-const int BALL_SPEED = 1;
-
-// Base class for game objects (paddles and ball)
-class GameObject {
-public:
-    GameObject(int xPos, int yPos, int width, int height, int velocity) :
-        x(xPos), y(yPos), width(width), height(height), velocity(velocity) {}
-    virtual ~GameObject() {}
-
-    int getX() const { return x; }
-    int getY() const { return y; }
-    int getWidth() const { return width; }
-    int getHeight() const { return height; }
-    void incY() { y = y + 5; }
-    void decY() { y = y - 5; }
-    
-
-    virtual void update() = 0;
-    virtual void draw(SDL_Renderer* renderer) const = 0;
-
-protected:
-    int x, y;
-    int width, height;
-    int velocity;
-};
-
-// Class for player paddles
-class Paddle : public GameObject {
-public:
-    Paddle(int xPos, int yPos) :
-        GameObject(xPos, yPos, PADDLE_WIDTH, PADDLE_HEIGHT, 0) {}
-
-    void update() override {
-        
-    }
-
-    void draw(SDL_Renderer* renderer) const override {
-        SDL_Rect rect = { x, y, width, height };
-        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-        SDL_RenderFillRect(renderer, &rect);
-    }
-
-    void stop() { y = 0; }
-    void replace() { y = SCREEN_HEIGHT - height; }
-};
-
-// Class for ball
-class Ball : public GameObject {
-public:
-    Ball(int xPos, int yPos) :
-        GameObject(xPos, yPos, BALL_WIDTH, BALL_HEIGHT, BALL_SPEED) {}
-
-    void update() override {
-        x += velocity;
-
-        if (direction == 1) {
-            y += velocity;
-        }
-        else {
-            y -= velocity;
-        }
-
-        if (y < 0 || y + height > SCREEN_HEIGHT) {
-            direction = direction * -1;
-        }
-    }
-
-    void draw(SDL_Renderer* renderer) const override {
-        SDL_Rect rect = { x, y, width, height };
-        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-        SDL_RenderFillRect(renderer, &rect);
-    }
-
-    void reset() {
-        x = SCREEN_WIDTH / 2 - BALL_WIDTH / 2;
-        y = SCREEN_HEIGHT / 2 - BALL_HEIGHT / 2;
-        velocity = BALL_SPEED;
-        direction = rand() % 2 == 0 ? -1 : 1;
-    }
-
-    void reverseVelocity() {
-        velocity = -velocity;
-        velocity += rand() % 5 - 1; // Add -1, 0, or 3 to the ball's velocity
-        direction = rand() % 2 == 0 ? -1 : 1;
-    }
-
-private:
-    int direction = rand() % 2 == 0 ? -1 : 1;
-};
+#include <vector>
+#include "idk.hpp"
 
 // Function to check for collision between two objects
 bool checkCollision(const GameObject& obj1, const GameObject& obj2) {
-    return (obj1.getX() < obj2.getX() + obj2.getWidth() && obj1.getX() + obj1.getWidth() > obj2.getX() && obj1.getY() < obj2.getY() + obj2.getHeight() && obj1.getY() + obj1.getHeight() > obj2.getY());
+    return (obj1.getX() < obj2.getX() + obj2.getWidth() &&
+        obj1.getX() + obj1.getWidth() > obj2.getX() &&
+        obj1.getY() < obj2.getY() + obj2.getHeight() &&
+        obj1.getY() + obj1.getHeight() > obj2.getY());
+}
+
+void showStartingPage(SDL_Renderer* renderer, int& numBalls) {
+    bool selecting = true;
+    SDL_Event event;
+
+    SDL_Surface* imageSurface = IMG_Load("start.bmp");
+    if (!imageSurface) {
+
+        SDL_Log("Failed to load image: %s", IMG_GetError());
+        return;
+    }
+
+    SDL_Texture* imageTexture = SDL_CreateTextureFromSurface(renderer, imageSurface);
+    if (!imageTexture) {
+
+        SDL_Log("Failed to create texture from surface: %s", SDL_GetError());
+        SDL_FreeSurface(imageSurface);
+        return;
+    }
+
+    while (selecting) {
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT) {
+                SDL_Quit();
+                exit(0);
+            }
+            else if (event.type == SDL_KEYDOWN) {
+                if (event.key.keysym.sym == SDLK_1) {
+                    numBalls = 1;
+                    selecting = false;
+                }
+                else if (event.key.keysym.sym == SDLK_2) {
+                    numBalls = 2;
+                    selecting = false;
+                }
+                else if (event.key.keysym.sym == SDLK_3) {
+                    numBalls = 3;
+                    selecting = false;
+                }
+                else if (event.key.keysym.sym == SDLK_4) {
+                    numBalls = 4;
+                    selecting = false;
+                }
+                else if (event.key.keysym.sym == SDLK_5) {
+                    numBalls = 5;
+                    selecting = false;
+                }
+            }
+            SDL_Delay(10);
+        }
+
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderClear(renderer);
+
+        // Render the image on the starting screen
+        SDL_RenderCopy(renderer, imageTexture, nullptr, nullptr);
+
+        // Present the renderer
+        SDL_RenderPresent(renderer);
+    }
+    SDL_DestroyTexture(imageTexture);
 }
 
 
 int main(int argc, char* argv[]) {
+    int player1 = 0, player2 = 0;
+    int numBalls = 1;
     SDL_Init(SDL_INIT_VIDEO);
-
     SDL_Window* window = SDL_CreateWindow("Pong", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
 
     SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, 0);
 
+    showStartingPage(renderer, numBalls);
+
     std::unique_ptr<Paddle> leftPaddle = std::make_unique<Paddle>(0, SCREEN_HEIGHT / 2 - PADDLE_HEIGHT / 2);
     std::unique_ptr<Paddle> rightPaddle = std::make_unique<Paddle>(SCREEN_WIDTH - PADDLE_WIDTH, SCREEN_HEIGHT / 2 - PADDLE_HEIGHT / 2);
-    std::unique_ptr<Ball> ball = std::make_unique<Ball>(SCREEN_WIDTH / 2 - BALL_WIDTH / 2, SCREEN_HEIGHT / 2 - BALL_HEIGHT / 2);
+
+    std::vector<std::unique_ptr<Ball>> balls;
+    balls.push_back(std::make_unique<Ball>(SCREEN_WIDTH / 2 - BALL_WIDTH / 2, SCREEN_HEIGHT / 2 - BALL_HEIGHT / 2));
+
+    for (int i = 1; i < numBalls; ++i) {
+        int ballType = rand() % 3;
+
+        if (ballType == 0) {
+            balls.push_back(std::make_unique<Ball>(SCREEN_WIDTH / 2 - BALL_WIDTH / 2, SCREEN_HEIGHT / 2 - BALL_HEIGHT / 2));
+        }
+        else if(ballType == 1) {
+            balls.push_back(std::make_unique<FastBall>(SCREEN_WIDTH / 2 - BALL_WIDTH / 2, SCREEN_HEIGHT / 2 - BALL_HEIGHT / 2));
+        }
+        else {
+            balls.push_back(std::make_unique<Horizontal_Ball>(SCREEN_WIDTH / 2 - BALL_WIDTH / 2, SCREEN_HEIGHT / 2 - BALL_HEIGHT / 2));
+        }
+    }
 
     bool running = true;
     while (running) {
@@ -126,36 +116,53 @@ int main(int argc, char* argv[]) {
         }
 
         const Uint8* keystates = SDL_GetKeyboardState(NULL);
-        if (keystates[SDL_SCANCODE_W]) {
-            leftPaddle->decY();
+        if (keystates[SDL_SCANCODE_Q]) {
+            leftPaddle->setYVelocity(-5);
         }
-        if (keystates[SDL_SCANCODE_S]) {
-            leftPaddle->incY();
+        else if (keystates[SDL_SCANCODE_A]) {
+            leftPaddle->setYVelocity(5);
         }
-        if (keystates[SDL_SCANCODE_UP]) {
-            rightPaddle->decY();
-        }
-        if (keystates[SDL_SCANCODE_DOWN]) {
-            rightPaddle->incY();
+        else {
+            leftPaddle->setYVelocity(0);
         }
 
-        ball->update();
+        if (keystates[SDL_SCANCODE_UP]) {
+            rightPaddle->setYVelocity(-5);
+        }
+        else if (keystates[SDL_SCANCODE_DOWN]) {
+            rightPaddle->setYVelocity(5);
+        }
+        else {
+            rightPaddle->setYVelocity(0);
+        }
+
+        leftPaddle->update();
+        rightPaddle->update();
 
         // Check for collision between ball and paddles
-        if (checkCollision(*ball, *leftPaddle) || checkCollision(*ball, *rightPaddle)) {
-            ball->reverseVelocity();
-        }
+        for (const auto& ball : balls) {
+            ball->update();
 
-        // Check for scoring
-        if (ball->getX() < 0) {
-            ball->reset();
-        }
-        if (ball->getX() > SCREEN_WIDTH) {
-            ball->reset();
+            // Check for collision between ball and paddles
+            if (checkCollision(*ball, *leftPaddle) || checkCollision(*ball, *rightPaddle)) {
+                ball->reverseVelocity();
+            }
+
+            // Check for scoring
+            if (ball->getX() < 0) {
+                ball->reset();
+                player1++;
+                std::cout << player1 << "-" << player2<<"\n";
+            }
+            if (ball->getX() > SCREEN_WIDTH) {
+                ball->reset();
+                player2++;
+                std::cout << player1 << "-" << player2<<"\n";
+            }
         }
 
         if (leftPaddle->getY() < 0) {
-            leftPaddle -> stop();
+            leftPaddle->stop();
         }
         else if (leftPaddle->getY() > SCREEN_HEIGHT - leftPaddle->getHeight()) {
             leftPaddle->replace();
@@ -173,7 +180,9 @@ int main(int argc, char* argv[]) {
 
         leftPaddle->draw(renderer);
         rightPaddle->draw(renderer);
-        ball->draw(renderer);
+        for (const auto& ball : balls) {
+            ball->draw(renderer);
+        }
 
         SDL_RenderPresent(renderer);
 
